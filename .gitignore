@@ -1,0 +1,50 @@
+# Root-level gitignore
+.DS_Store
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Secrets
+secrets/
+.env
+.env.local
+*.key
+*.pem
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# IDE
+*.sublime-project
+*.sublime-workspace
+
+# OS
+Thumbs.db
+
+# ── Added 2026-09-28 (Release 0 hygiene) ──
+# Virtualenvs / dependency trees
+.venv-native/
+backend/venv/
+backend/.venv/
+**/node_modules/
+__pycache__/
+*.pyc
+
+# Runtime logs and mutable local state
+.avira-logs/
+backend/data/*.json
+
+# Credentials — never commit real values
+TELEGRAM_BOT_TOKEN
+telegram_output
+backend/credentials.json
+backend/token.json
+*.keystore
+!**/debug.keystore.example
+
+# Personal data
+schoology_calendar.ics

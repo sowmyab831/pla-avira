@@ -1,0 +1,73 @@
+{
+  "base": "http://localhost:30001",
+  "user": "verify_u1",
+  "pages": {
+    "family": {
+      "rendered_chars": 822,
+      "console_errors": [
+        "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+      ],
+      "page_errors": [],
+      "bad_api_calls": [
+        {
+          "url": "http://localhost:30000/api/family-hub/oversight",
+          "status": 403
+        }
+      ],
+      "elapsed_ms": 2506,
+      "ok": true
+    },
+    "portfolio": {
+      "rendered_chars": 1683,
+      "console_errors": [],
+      "page_errors": [],
+      "bad_api_calls": [],
+      "elapsed_ms": 2504,
+      "ok": true
+    },
+    "tasks": {
+      "rendered_chars": 692,
+      "console_errors": [],
+      "page_errors": [],
+      "bad_api_calls": [],
+      "elapsed_ms": 2504,
+      "ok": true
+    },
+    "news": {
+      "rendered_chars": 1487,
+      "console_errors": [],
+      "page_errors": [],
+      "bad_api_calls": [],
+      "elapsed_ms": 2504,
+      "ok": true
+    },
+    "trading": {
+      "rendered_chars": 1550,
+      "console_errors": [],
+      "page_errors": [],
+      "bad_api_calls": [],
+      "elapsed_ms": 2505,
+      "ok": true
+    },
+    "ai_settings": {
+      "rendered_chars": 5747,
+      "console_errors": [],
+      "page_errors": [],
+      "bad_api_calls": [],
+      "elapsed_ms": 2507,
+      "ok": true
+    },
+    "subscription": {
+      "rendered_chars": 1865,
+      "console_errors": [],
+      "page_errors": [],
+      "bad_api_calls": [],
+      "elapsed_ms": 2504,
+      "ok": true
+    }
+  },
+  "login": {
+    "landing": "Personal Life Assistant",
+    "authenticated": true
+  }
+}

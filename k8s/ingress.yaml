@@ -1,0 +1,119 @@
+# Ingress configuration for local development (OrbStack)
+# 
+# For local development with OrbStack:
+# 1. No TLS setup needed - OrbStack handles it
+# 2. Access via: http://localhost:3000 (frontend), http://localhost:8000 (backend via port-forward)
+# 3. Or use NodePort services for direct access
+#
+# For production cloud deployment:
+# - Use cert-manager with Let's Encrypt
+# - Or use managed TLS from cloud provider (ALB, Cloud Load Balancer)
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pla-ingress
+  namespace: pla
+  annotations:
+    # For OrbStack, we don't need TLS annotations
+    # For production, uncomment:
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx  # Requires nginx-ingress controller
+  # TLS disabled for local development
+  # For production, enable:
+  # tls:
+  # - hosts:
+  #   - pla.local
+  #   - api.pla.local
+  #   - db.pla.local
+  #   - cache.pla.local
+  #   - search.pla.local
+  #   secretName: pla-tls
+  rules:
+  # Frontend
+  - host: localhost
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80
+  # API Backend (running locally on Mac, proxied via frontend)
+  - host: localhost
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend  # Frontend proxies /api to backend
+            port:
+              number: 80
+  # Direct service access (for debugging)
+  - host: postgres.localhost
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: postgres
+            port:
+              number: 5432
+  - host: redis.localhost
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: redis
+            port:
+              number: 6379
+  - host: qdrant.localhost
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: qdrant-lb
+            port:
+              number: 6333
+  - host: meili.localhost
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: meili
+            port:
+              number: 7700
+---
+# Alternative: Traefik IngressRoute (if using Traefik)
+# apiVersion: traefik.io/v1alpha1
+# kind: IngressRoute
+# metadata:
+#   name: pla-ingressroute
+#   namespace: pla
+# spec:
+#   entryPoints:
+#   - websecure
+#   routes:
+#   - match: Host(`pla.local`)
+#     kind: Rule
+#     services:
+#     - name: frontend
+#       port: 80
+#   - match: Host(`api.pla.local`)
+#     kind: Rule
+#     services:
+#     - name: backend
+#       port: 8000
+#   tls:
+#     secretName: pla-tls

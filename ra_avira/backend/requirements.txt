@@ -1,0 +1,73 @@
+# Core
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+pydantic-settings==2.5.2
+python-multipart==0.0.9
+
+# Database
+sqlalchemy[asyncio]==2.0.35
+asyncpg==0.29.0
+alembic==1.13.2
+pgvector==0.3.4
+
+# Cache & Queue
+redis==5.1.1
+celery[redis]==5.4.0
+
+# AI / LLM
+openai==1.51.0
+google-generativeai==0.8.1
+langchain==0.3.1
+langgraph==0.2.28
+langchain-openai==0.2.1
+langchain-community==0.3.1
+llama-index==0.11.10
+
+# Embeddings & Vector
+sentence-transformers==3.1.1
+numpy==1.26.4
+
+# Search
+opensearch-py==2.7.1
+
+# Crawling
+scrapy==2.11.2
+playwright==1.47.0
+beautifulsoup4==4.12.3
+httpx==0.27.2
+aiohttp==3.10.5
+
+# OCR & Image
+pytesseract==0.3.10
+Pillow==10.4.0
+imagehash==4.3.1
+
+# Voice
+deepgram-sdk==3.7.0
+openai-whisper==20231117
+
+# Maps & Geo
+geopy==2.4.1
+shapely==2.0.6
+
+# PDF & Documents
+pdfplumber==0.11.4
+python-docx==1.1.2
+
+# Auth & Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+cryptography==43.0.1
+
+# Utilities
+python-dotenv==1.0.1
+tenacity==9.0.0
+structlog==24.4.0
+orjson==3.10.7
+python-dateutil==2.9.0
+
+# Testing
+pytest==8.3.3
+pytest-asyncio==0.24.0
+httpx==0.27.2

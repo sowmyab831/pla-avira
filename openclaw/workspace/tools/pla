@@ -1,0 +1,314 @@
+#!/usr/bin/env bash
+# pla — CLI bridge for OpenClaw → PLA Backend
+# Lightweight curl wrapper. No dependencies beyond bash + curl + jq.
+#
+# Usage: pla <command> [args...]
+# Example: pla stock AAPL
+#          pla shop "organic chicken"
+#          pla flights CLT RDU 2025-04-01
+
+set -euo pipefail
+
+API="${PLA_API_URL:-http://localhost:30000}"
+USER_UUID="${PLA_USER_UUID:-user-default}"
+JQ=$(command -v jq 2>/dev/null || echo "cat")
+
+# ── Auth ──────────────────────────────────────────────────
+# Authenticated endpoints (earnings, notifications, digest) need a JWT.
+# Token resolution order:
+#   1. $PLA_TOKEN env (use directly)
+#   2. login via /api/auth/login with $PLA_USERNAME/$PLA_PASSWORD (default admin/changeme),
+#      cached to a temp file for ~50 min.
+PLA_USERNAME="${PLA_USERNAME:-admin}"
+PLA_PASSWORD="${PLA_PASSWORD:-changeme}"
+_TOKEN_CACHE="${TMPDIR:-/tmp}/pla_token_$(id -u).jwt"
+
+_token() {
+  if [[ -n "${PLA_TOKEN:-}" ]]; then echo "$PLA_TOKEN"; return; fi
+  if [[ -f "$_TOKEN_CACHE" ]]; then
+    local age=$(( $(date +%s) - $(stat -f %m "$_TOKEN_CACHE" 2>/dev/null || stat -c %Y "$_TOKEN_CACHE" 2>/dev/null || echo 0) ))
+    if (( age < 3000 )); then cat "$_TOKEN_CACHE"; return; fi
+  fi
+  local resp tok
+  resp=$(curl -sf -X POST "$API/api/auth/login" -H "Content-Type: application/json" \
+    -d "{\"username\":\"$PLA_USERNAME\",\"password\":\"$PLA_PASSWORD\"}" 2>/dev/null || true)
+  tok=$(echo "$resp" | $JQ -r '.access_token // empty' 2>/dev/null || true)
+  if [[ -n "$tok" && "$tok" != "null" ]]; then
+    echo "$tok" > "$_TOKEN_CACHE"; chmod 600 "$_TOKEN_CACHE" 2>/dev/null || true
+    echo "$tok"
+  fi
+}
+
+_auth_header() { local t; t=$(_token); [[ -n "$t" ]] && echo "Authorization: Bearer $t"; }
+
+_get()  {
+  local h; h=$(_auth_header)
+  curl -sf "$API$1" ${h:+-H "$h"} 2>/dev/null | $JQ . 2>/dev/null || curl -sf "$API$1" ${h:+-H "$h"}
+}
+_post() {
+  local h; h=$(_auth_header)
+  curl -sf -X POST "$API$1" -H "Content-Type: application/json" ${h:+-H "$h"} -d "$2" 2>/dev/null | $JQ . 2>/dev/null \
+    || curl -sf -X POST "$API$1" -H "Content-Type: application/json" ${h:+-H "$h"} -d "$2"
+}
+_put() {
+  local h; h=$(_auth_header)
+  curl -sf -X PUT "$API$1" -H "Content-Type: application/json" ${h:+-H "$h"} -d "$2" 2>/dev/null | $JQ . 2>/dev/null \
+    || curl -sf -X PUT "$API$1" -H "Content-Type: application/json" ${h:+-H "$h"} -d "$2"
+}
+
+case "${1:-help}" in
+
+  # ── Finance ──────────────────────────────────────────────
+  stock|quote)
+    _get "/api/portfolio/stocks/${2:?symbol}/comprehensive"
+    ;;
+  chart)
+    _get "/api/portfolio/stocks/${2:?symbol}/chart?period=${3:-1M}"
+    ;;
+  options)
+    _get "/api/portfolio/stocks/${2:?symbol}/options"
+    ;;
+  resilience)
+    _get "/api/portfolio/resilience/${2:?symbol}"
+    ;;
+  deep|deep-analysis)
+    fast=""
+    [[ "${3:-}" == "--fast" ]] && fast="?fast=true"
+    _get "/api/portfolio/deep-analysis/${2:?symbol}${fast}"
+    ;;
+  sentiment)
+    _get "/api/portfolio/sentiment/${2:?symbol}"
+    ;;
+  institutional|inst)
+    _get "/api/portfolio/institutional/${2:?symbol}"
+    ;;
+  forecast)
+    _get "/api/portfolio/stocks/${2:?symbol}/forecast"
+    ;;
+  targets)
+    _get "/api/portfolio/stocks/${2:?symbol}/intraday-targets"
+    ;;
+  stock-picks|top-picks|recommendations)
+    _get "/api/portfolio/market/recommendations?count=${2:-20}"
+    ;;
+  macro)
+    _get "/api/portfolio/market/macro"
+    ;;
+  news)
+    _get "/api/news/knowledge-pill"
+    ;;
+  india-market)
+    _get "/api/news/india/market"
+    ;;
+  influencers)
+    _get "/api/news/influencers"
+    ;;
+
+  # ── Shopping & Deals ────────────────────────────────────
+  shop|search)
+    shift
+    query=$(echo "$*" | sed 's/ /%20/g')
+    _get "/api/shopping/search?query=$query"
+    ;;
+  deals)
+    query=""
+    [[ -n "${2:-}" ]] && query="?query=$(echo "${@:2}" | sed 's/ /%20/g')"
+    _get "/api/portfolio/deals/latest$query"
+    ;;
+  cards|credit-cards)
+    _get "/api/portfolio/deals/credit-cards?category=${2:-travel}"
+    ;;
+  watchlist-deals)
+    shift
+    items=$(printf '"%s",' "$@" | sed 's/,$//')
+    _post "/api/portfolio/deals/watchlist-check" "[$items]"
+    ;;
+
+  # ── Travel ───────────────────────────────────────────────
+  flights)
+    _get "/api/travel/flights/search?origin=${2:?origin}&destination=${3:?dest}&departure_date=${4:?date}"
+    ;;
+
+  # ── Documents (privacy pipeline) ─────────────────────────
+  doc-text)
+    shift
+    text="$*"
+    _post "/api/documents/secure/text" "{\"text\":\"$text\",\"user_uuid\":\"$USER_UUID\"}"
+    ;;
+  doc-upload)
+    # Base64 encode an image file and upload
+    file="${2:?path}"
+    b64=$(base64 -i "$file" | tr -d '\n')
+    _post "/api/documents/secure/upload" "{\"image_data\":\"$b64\",\"user_uuid\":\"$USER_UUID\"}"
+    ;;
+  doc-query)
+    _post "/api/documents/secure/query" "{\"document_uuid\":\"${2:?doc_uuid}\",\"question\":\"${3:?question}\",\"user_uuid\":\"$USER_UUID\"}"
+    ;;
+  doc-list)
+    _get "/api/documents/secure/list/$USER_UUID"
+    ;;
+  doc-get)
+    _get "/api/documents/secure/${2:?doc_uuid}?user_uuid=$USER_UUID"
+    ;;
+  privacy-check)
+    shift
+    text=$(echo "$*" | sed 's/ /%20/g')
+    _get "/api/documents/privacy/check?text=$text"
+    ;;
+  privacy-audit)
+    _get "/api/documents/privacy/audit"
+    ;;
+
+  # ── Health ───────────────────────────────────────────────
+  health-upload)
+    file="${2:?path}"
+    b64=$(base64 -i "$file" | tr -d '\n')
+    _post "/api/documents/secure/upload" "{\"image_data\":\"$b64\",\"user_uuid\":\"$USER_UUID\",\"document_type\":\"health\"}"
+    ;;
+
+  # ── Calendar ─────────────────────────────────────────────
+  calendar)
+    _get "/api/calendar/upcoming?days=${2:-30}"
+    ;;
+  calendar-sync)
+    _post "/api/calendar/sync-all-schools" "{}"
+    ;;
+  calendar-add)
+    _post "/api/calendar/events" "{\"date\":\"${2:?date}\",\"title\":\"${3:?title}\",\"type\":\"${4:-custom}\"}"
+    ;;
+
+  # ── Email ────────────────────────────────────────────────
+  emails)
+    _get "/api/integrations/gmail/emails"
+    ;;
+  action-items)
+    _get "/api/integrations/action-items"
+    ;;
+  appointments)
+    _get "/api/integrations/appointments"
+    ;;
+
+  # ── Earnings Intelligence ───────────────────────────────
+  earnings-upcoming|upcoming-earnings)
+    _get "/api/earnings/upcoming?days=${2:-30}"
+    ;;
+  earnings-intel|earnings)
+    _get "/api/earnings/intelligence/${2:?symbol}"
+    ;;
+  earnings-quick)
+    _get "/api/earnings/quick/${2:?symbol}"
+    ;;
+
+  # ── Market Digest & WhatsApp delivery ───────────────────
+  digest)
+    # Preview the market + earnings digest (does NOT send)
+    _get "/api/notifications/digest/preview?earnings_days=${2:-14}"
+    ;;
+  digest-send)
+    # Build digest and deliver to the user's configured WhatsApp/email.
+    # Usage: pla digest-send [days] [--now]
+    days="${2:-14}"
+    auto="false"; [[ "${3:-}" == "--now" ]] && auto="true"
+    _post "/api/notifications/digest/send" "{\"earnings_days\":$days,\"auto_send\":$auto}"
+    ;;
+  watch-send)
+    # Send an earnings watch digest for specific symbols.
+    # Usage: pla watch-send NVDA,AAPL,MSFT [days] [--now]
+    syms=$(echo "${2:?symbols (comma-separated)}" | tr ',' '\n' | sed 's/^/"/;s/$/"/' | paste -sd, -)
+    days="${3:-30}"
+    auto="false"; [[ "${4:-}" == "--now" ]] && auto="true"
+    _post "/api/notifications/digest/send" "{\"earnings_days\":$days,\"watchlist\":[$syms],\"auto_send\":$auto}"
+    ;;
+  notify-prefs)
+    _get "/api/notifications/preferences"
+    ;;
+  notify-set-whatsapp)
+    # pla notify-set-whatsapp +15551234567
+    _put "/api/notifications/preferences" "{\"whatsapp_enabled\":true,\"whatsapp_number\":\"${2:?phone e.g. +15551234567}\"}"
+    ;;
+  notify-pending)
+    _get "/api/notifications/pending"
+    ;;
+  notify-approve)
+    _post "/api/notifications/approve/${2:?approval_id}" "{}"
+    ;;
+
+  # ── Chat (general assistant) ─────────────────────────────
+  ask|chat)
+    shift
+    msg="$*"
+    esc=$(printf '%s' "$msg" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    _post "/api/assistant/chat" "{\"message\":\"$esc\",\"session_id\":\"cli-$USER_UUID\"}"
+    ;;
+
+  # ── System ───────────────────────────────────────────────
+  health)
+    _get "/health"
+    ;;
+
+  help|*)
+    cat <<'EOF'
+pla — Personal Life Assistant CLI
+
+FINANCE & TRADING
+  pla stock <SYMBOL>         Comprehensive stock analysis
+  pla forecast <SYMBOL>      Multi-horizon forecast (1h/1d/1w/1m/3m/1y)
+  pla targets <SYMBOL>       Intraday options targets (CALL/PUT)
+  pla stock-picks [N]        Top N investment recommendations (default 20)
+  pla macro                  Market dashboard (VIX, Fear/Greed, P/C)
+  pla chart <SYMBOL> [1M]    Price chart data
+  pla options <SYMBOL>       Options chain + strategies
+  pla deep <SYMBOL> [--fast] Deep analysis (Elliott+AI+sentiment+institutional)
+  pla sentiment <SYMBOL>     Market sentiment (Reddit, Fear/Greed)
+  pla inst <SYMBOL>          Institutional holders + analyst ratings
+  pla news                   Daily knowledge pill + market movers
+
+SHOPPING & DEALS
+  pla shop <query>           Multi-retailer price search
+  pla deals [query]          Hot deals from SlickDeals, Reddit, DealNews
+  pla cards [travel|cashback] Credit card + points recommendations
+  pla watchlist-deals <items> Check if watchlist items have deals
+
+TRAVEL
+  pla flights <from> <to> <date>   Flight search
+
+DOCUMENTS (Privacy Pipeline)
+  pla doc-upload <file>      Upload image → OCR → mask → analyze
+  pla doc-text <text>        Process text → mask → analyze
+  pla doc-query <uuid> <q>   Ask question about document
+  pla doc-list               List your documents
+  pla doc-get <uuid>         Get document details
+  pla health-upload <file>   Upload health document
+  pla privacy-check <text>   Check text for PII
+  pla privacy-audit          Privacy audit log
+
+CALENDAR
+  pla calendar [days]        Upcoming events
+  pla calendar-sync          Sync school calendars
+  pla calendar-add <date> <title> [type]
+
+EARNINGS INTELLIGENCE
+  pla earnings-upcoming [days]   Upcoming earnings calendar (default 30)
+  pla earnings-intel <SYMBOL>    Full 12-dimension AI earnings analysis
+  pla earnings-quick <SYMBOL>    Light earnings preview
+
+MARKET DIGEST & WHATSAPP (consent-based)
+  pla digest [days]              Preview market + earnings digest (no send)
+  pla digest-send [days] [--now] Queue digest; --now delivers to your WhatsApp/email
+  pla watch-send SYM1,SYM2 [d] [--now]  Earnings watch digest for your symbols
+  pla notify-prefs               Show notification preferences
+  pla notify-set-whatsapp +1555...  Opt-in WhatsApp + set number
+  pla notify-pending             Notifications awaiting your approval
+  pla notify-approve <id>        Approve & send a queued notification
+
+EMAIL
+  pla emails                 Unread emails
+  pla action-items           Pending action items
+  pla appointments           Upcoming appointments
+
+GENERAL
+  pla ask <question>         Ask the AI assistant
+  pla health                 System health check
+EOF
+    ;;
+esac

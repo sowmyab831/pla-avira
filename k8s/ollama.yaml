@@ -1,0 +1,79 @@
+# OPTION 1: Deploy Ollama in Kubernetes (optional for local dev)
+# For local development on Mac Mini M4, you may prefer to run Ollama on the host
+# and access it via host.docker.internal:11434 from containers.
+# To use host Ollama: set OLLAMA_HOST=http://host.docker.internal:11434 in backend env.
+#
+# OPTION 2: Deploy Ollama in K8s (uncomment below if preferred)
+# NOTE: Ollama requires significant resources; ensure your Mac Mini has sufficient memory.
+# NO GPU selectors used (Metal/MPS is implicit on ARM64 Mac).
+---
+# PVC is created separately in storage-class.yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  namespace: pla
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: "arm64"
+      containers:
+      - name: ollama
+        image: ollama/ollama:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 11434
+          name: http
+        env:
+        - name: OLLAMA_HOST
+          value: "0.0.0.0:11434"
+        volumeMounts:
+        - name: ollama-storage
+          mountPath: /root/.ollama
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "2"
+          limits:
+            memory: "8Gi"
+            cpu: "4"
+        # Note: Ollama will auto-download mistral on first request to /api/pull
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 11434
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 11434
+          initialDelaySeconds: 30
+          periodSeconds: 5
+      volumes:
+      - name: ollama-storage
+        persistentVolumeClaim:
+          claimName: ollama-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  namespace: pla
+spec:
+  selector:
+    app: ollama
+  ports:
+  - port: 11434
+    targetPort: 11434
+    name: http
+  type: ClusterIP

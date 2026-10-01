@@ -1,0 +1,71 @@
+# PVC is created separately in storage-class.yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: meili
+  namespace: pla
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: meili
+  template:
+    metadata:
+      labels:
+        app: meili
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: "arm64"
+      containers:
+      - name: meili
+        image: getmeili/meilisearch:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 7700
+          name: http
+        env:
+        - name: MEILI_MASTER_KEY
+          value: "changeme-meili-master-key"
+        - name: MEILI_ENV
+          value: "production"
+        volumeMounts:
+        - name: meili-storage
+          mountPath: /meili_data
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 7700
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 7700
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      volumes:
+      - name: meili-storage
+        persistentVolumeClaim:
+          claimName: meili-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: meili
+  namespace: pla
+spec:
+  selector:
+    app: meili
+  ports:
+  - port: 7700
+    targetPort: 7700
+    name: http
+  type: ClusterIP

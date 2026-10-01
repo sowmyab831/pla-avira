@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Avira Options Trading Bot — Live Alerts</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', sans-serif; background: #0a0a1a; color: #e0e0f0; min-height: 100vh; }
+  
+  .header { background: linear-gradient(135deg, #1a1a3e 0%, #0d0d2b 100%); padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #2a2a5a; }
+  .header h1 { font-size: 20px; font-weight: 800; background: linear-gradient(90deg, #818cf8, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .header .status { display: flex; align-items: center; gap: 12px; font-size: 12px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .status-dot.live { background: #10b981; animation: pulse 2s infinite; }
+  .status-dot.off { background: #ef4444; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  
+  .controls { padding: 12px 24px; background: #111133; display: flex; gap: 12px; align-items: center; border-bottom: 1px solid #1a1a4a; flex-wrap: wrap; }
+  .btn { padding: 8px 20px; border: none; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+  .btn-start { background: #10b981; color: white; }
+  .btn-start:hover { background: #059669; }
+  .btn-stop { background: #ef4444; color: white; }
+  .btn-stop:hover { background: #dc2626; }
+  .btn-scan { background: #6366f1; color: white; }
+  .btn-scan:hover { background: #4f46e5; }
+  .btn-reset { background: #374151; color: #9ca3af; }
+  .info-chip { background: #1e1b4b; border: 1px solid #312e81; border-radius: 8px; padding: 6px 14px; font-size: 12px; color: #a5b4fc; }
+  
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; height: calc(100vh - 130px); }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  
+  /* Alert Panel */
+  .alerts-panel { border-right: 1px solid #1a1a4a; display: flex; flex-direction: column; }
+  .alerts-header { padding: 12px 20px; background: #111133; font-weight: 700; font-size: 14px; border-bottom: 1px solid #1a1a4a; display: flex; justify-content: space-between; align-items: center; }
+  .alerts-list { flex: 1; overflow-y: auto; padding: 8px; }
+  
+  .alert-card { border-radius: 12px; padding: 14px 18px; margin-bottom: 8px; display: flex; align-items: center; gap: 14px; animation: slideIn 0.3s ease-out; }
+  @keyframes slideIn { from { transform: translateX(-20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  .alert-card.buy { background: linear-gradient(135deg, #064e3b, #065f46); border: 1px solid #10b981; }
+  .alert-card.sell { background: linear-gradient(135deg, #7f1d1d, #991b1b); border: 1px solid #ef4444; }
+  .alert-card.hold { background: #1e1b4b; border: 1px solid #312e81; }
+  
+  .alert-action { font-size: 22px; font-weight: 900; min-width: 70px; text-align: center; padding: 6px; border-radius: 8px; }
+  .alert-action.buy { color: #10b981; background: #10b98120; }
+  .alert-action.sell { color: #ef4444; background: #ef444420; }
+  .alert-action.hold { color: #6366f1; background: #6366f120; }
+  
+  .alert-info { flex: 1; }
+  .alert-symbol { font-size: 18px; font-weight: 800; color: #f1f5f9; }
+  .alert-price { font-size: 13px; color: #94a3b8; margin-top: 2px; }
+  .alert-reasons { font-size: 11px; color: #64748b; margin-top: 4px; }
+  .alert-conf { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 20px; }
+  .alert-conf.high { background: #10b98130; color: #34d399; }
+  .alert-conf.med { background: #f59e0b30; color: #fbbf24; }
+  .alert-conf.low { background: #6b728030; color: #9ca3af; }
+  .alert-time { font-size: 10px; color: #475569; }
+  
+  /* Flash animation for new alerts */
+  .flash-buy { animation: flashGreen 1s ease-out; }
+  .flash-sell { animation: flashRed 1s ease-out; }
+  @keyframes flashGreen { 0% { box-shadow: 0 0 40px #10b981; } 100% { box-shadow: none; } }
+  @keyframes flashRed { 0% { box-shadow: 0 0 40px #ef4444; } 100% { box-shadow: none; } }
+  
+  /* Status Panel */
+  .status-panel { display: flex; flex-direction: column; }
+  .status-header { padding: 12px 20px; background: #111133; font-weight: 700; font-size: 14px; border-bottom: 1px solid #1a1a4a; }
+  .status-content { flex: 1; overflow-y: auto; padding: 16px; }
+  
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .stat-card { background: #111133; border: 1px solid #1e1b4b; border-radius: 10px; padding: 14px; }
+  .stat-label { font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-value { font-size: 24px; font-weight: 800; margin-top: 4px; }
+  .stat-value.green { color: #10b981; }
+  .stat-value.red { color: #ef4444; }
+  .stat-value.blue { color: #818cf8; }
+  .stat-value.white { color: #f1f5f9; }
+  
+  .positions-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  .positions-table th { text-align: left; font-size: 11px; color: #6b7280; padding: 6px 8px; border-bottom: 1px solid #1e1b4b; }
+  .positions-table td { padding: 8px; font-size: 13px; border-bottom: 1px solid #111133; }
+  
+  .trade-log { margin-top: 16px; }
+  .trade-entry { padding: 8px 12px; border-radius: 8px; margin-bottom: 4px; font-size: 12px; display: flex; justify-content: space-between; }
+  .trade-entry.buy-log { background: #064e3b40; border-left: 3px solid #10b981; }
+  .trade-entry.sell-log { background: #7f1d1d40; border-left: 3px solid #ef4444; }
+
+  .rh-guide { margin-top: 16px; background: #1e1b4b; border: 1px solid #312e81; border-radius: 12px; padding: 16px; }
+  .rh-guide h3 { font-size: 14px; color: #a5b4fc; margin-bottom: 8px; }
+  .rh-guide p { font-size: 12px; color: #7c82a8; line-height: 1.6; }
+  .rh-guide .step { display: flex; gap: 8px; margin-bottom: 6px; }
+  .rh-guide .step-num { background: #6366f1; color: white; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Avira Options Trading Bot</h1>
+  <div class="status">
+    <span id="mode-badge" class="info-chip">PAPER MODE</span>
+    <div class="status-dot" id="status-dot"></div>
+    <span id="status-text">Connecting...</span>
+    <span id="clock" style="color:#6b7280; font-family:monospace;"></span>
+  </div>
+</div>
+
+<div class="controls">
+  <button class="btn btn-start" onclick="startBot()">▶ Start Bot</button>
+  <button class="btn btn-scan" onclick="scanNow()">⚡ Scan Now</button>
+  <button class="btn btn-stop" onclick="stopBot()">■ Stop</button>
+  <button class="btn btn-reset" onclick="resetBot()">↻ Reset $1000</button>
+  <div style="display:flex;align-items:center;gap:6px;margin-left:8px;">
+    <input type="text" id="add-ticker" placeholder="Add ticker (e.g. PLTR)" style="background:#1e1b4b;border:1px solid #312e81;color:#e0e0f0;padding:6px 12px;border-radius:8px;font-size:13px;width:160px;" onkeydown="if(event.key==='Enter')addTicker()">
+    <button class="btn" style="background:#818cf8;color:white;padding:6px 14px;" onclick="addTicker()">+ Add</button>
+  </div>
+  <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#9ca3af;margin-left:auto;">
+    <input type="checkbox" id="auto-scan" checked> Auto-scan 5s
+  </label>
+  <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#9ca3af;">
+    <input type="checkbox" id="sound-alerts" checked> Sound alerts
+  </label>
+</div>
+<div id="watchlist-chips" style="padding:4px 24px 8px;background:#0d0d2b;display:flex;flex-wrap:wrap;gap:6px;font-size:12px;"></div>
+
+<div class="grid">
+  <!-- Left: Alerts -->
+  <div class="alerts-panel">
+    <div class="alerts-header">
+      <span>🔔 Live Trading Alerts</span>
+      <span id="alert-count" style="color:#6b7280;font-size:12px;">0 alerts</span>
+    </div>
+    <div class="alerts-list" id="alerts-list">
+      <div style="text-align:center;padding:40px;color:#4b5563;">
+        Click <strong>Start Bot</strong> or <strong>Scan Now</strong> to begin scanning...<br>
+        <span style="font-size:12px;">Scanning every <strong>5 seconds</strong> during market hours</span><br>
+        <span style="font-size:11px;">Add your own tickers using the input above</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: Status -->
+  <div class="status-panel">
+    <div class="status-header">📊 Portfolio & Status</div>
+    <div class="status-content">
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-label">Capital</div>
+          <div class="stat-value white" id="stat-capital">$1,000</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total P&L</div>
+          <div class="stat-value green" id="stat-pnl">$0.00</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Return</div>
+          <div class="stat-value blue" id="stat-return">0.00%</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Win Rate</div>
+          <div class="stat-value white" id="stat-winrate">0%</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Open Positions</div>
+          <div class="stat-value white" id="stat-positions">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Trades Today</div>
+          <div class="stat-value white" id="stat-trades">0 / 10</div>
+        </div>
+      </div>
+
+      <h3 style="font-size:13px;color:#9ca3af;margin-bottom:8px;">Open Positions</h3>
+      <table class="positions-table">
+        <thead><tr><th>Symbol</th><th>Strike</th><th>Entry</th><th>Current</th><th>P&L</th></tr></thead>
+        <tbody id="positions-body"><tr><td colspan="5" style="color:#4b5563;text-align:center;">No positions</td></tr></tbody>
+      </table>
+
+      <h3 style="font-size:13px;color:#9ca3af;margin:16px 0 8px;">Recent Trades</h3>
+      <div id="trade-log" class="trade-log">
+        <div style="color:#4b5563;font-size:12px;text-align:center;">No trades yet</div>
+      </div>
+
+      <div class="rh-guide">
+        <h3>📱 How to Use with Robinhood</h3>
+        <div class="step"><span class="step-num">1</span><p>Open Robinhood app on your phone alongside this dashboard</p></div>
+        <div class="step"><span class="step-num">2</span><p>When you see a <strong style="color:#10b981;">BUY BUY</strong> alert, go to Robinhood → search the ticker → Options → find the strike/expiry shown</p></div>
+        <div class="step"><span class="step-num">3</span><p>Buy the call option at market or limit price</p></div>
+        <div class="step"><span class="step-num">4</span><p>When you see <strong style="color:#ef4444;">SELL SELL</strong> for your position, sell to close on Robinhood</p></div>
+        <div class="step"><span class="step-num">5</span><p>The bot tracks paper P&L separately — compare with your real results</p></div>
+        <p style="margin-top:8px;color:#f59e0b;font-size:11px;">⚠️ This is for educational purposes. You make ALL final trading decisions. Options can lose 100% of value.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const BOT_API = 'http://localhost:8200';
+const MAIN_API = 'http://localhost:30000';
+let scanTimer = null;
+let alerts = [];
+let isRunning = false;
+
+// Audio alert
+function playAlert(type) {
+  if (!document.getElementById('sound-alerts').checked) return;
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  if (type === 'buy') {
+    osc.frequency.value = 800;
+    gain.gain.value = 0.3;
+  } else {
+    osc.frequency.value = 400;
+    gain.gain.value = 0.3;
+  }
+  osc.start();
+  setTimeout(() => { osc.frequency.value = type === 'buy' ? 1000 : 300; }, 150);
+  setTimeout(() => { osc.stop(); ctx.close(); }, 300);
+}
+
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleTimeString();
+  const hour = now.getHours();
+  const isMarketHours = now.getDay() >= 1 && now.getDay() <= 5 && hour >= 9 && hour < 16;
+  document.getElementById('status-text').textContent = isMarketHours ? 'Market Open' : 'Market Closed';
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+async function fetchJSON(url, opts = {}) {
+  try {
+    const r = await fetch(url, opts);
+    return await r.json();
+  } catch(e) { console.error(url, e); return null; }
+}
+
+async function updateStatus() {
+  const d = await fetchJSON(BOT_API + '/api/options-bot/status');
+  if (!d) return;
+  document.getElementById('stat-capital').textContent = '$' + d.capital.toLocaleString(undefined, {minimumFractionDigits:2});
+  const pnl = d.total_pnl;
+  const pnlEl = document.getElementById('stat-pnl');
+  pnlEl.textContent = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
+  pnlEl.className = 'stat-value ' + (pnl >= 0 ? 'green' : 'red');
+  const ret = d.total_return_pct;
+  const retEl = document.getElementById('stat-return');
+  retEl.textContent = (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%';
+  retEl.className = 'stat-value ' + (ret >= 0 ? 'green' : 'red');
+  document.getElementById('stat-winrate').textContent = d.win_rate + '%';
+  document.getElementById('stat-positions').textContent = d.open_positions;
+  document.getElementById('stat-trades').textContent = d.daily_trades + ' / 50';
+  
+  // Positions
+  const tbody = document.getElementById('positions-body');
+  if (d.positions && d.positions.length > 0) {
+    tbody.innerHTML = d.positions.map(p => `
+      <tr>
+        <td style="font-weight:700;color:#f1f5f9;">${p.symbol}</td>
+        <td>$${p.strike} C</td>
+        <td>$${p.entry_price}</td>
+        <td>$${p.current_price}</td>
+        <td style="color:${p.pnl >= 0 ? '#10b981' : '#ef4444'};font-weight:700;">${p.pnl >= 0 ? '+' : ''}$${p.pnl.toFixed(2)} (${p.pnl_pct}%)</td>
+      </tr>
+    `).join('');
+  } else {
+    tbody.innerHTML = '<tr><td colspan="5" style="color:#4b5563;text-align:center;">No open positions</td></tr>';
+  }
+  
+  // Trade log
+  const logEl = document.getElementById('trade-log');
+  if (d.recent_trades && d.recent_trades.length > 0) {
+    logEl.innerHTML = d.recent_trades.slice().reverse().map(t => {
+      const isBuy = t.action === 'BUY';
+      return `<div class="trade-entry ${isBuy ? 'buy-log' : 'sell-log'}">
+        <span><strong>${t.action}</strong> ${t.symbol} $${t.strike}C ${t.expiry} × ${t.qty}</span>
+        <span>${t.pnl !== undefined ? (t.pnl >= 0 ? '+' : '') + '$' + t.pnl.toFixed(2) : '$' + (t.price * t.qty * 100).toFixed(0)}</span>
+      </div>`;
+    }).join('');
+  }
+  
+  isRunning = d.running;
+  const dot = document.getElementById('status-dot');
+  dot.className = 'status-dot ' + (isRunning ? 'live' : 'off');
+}
+
+function addAlert(signal) {
+  const action = signal.action || 'HOLD';
+  const isBuy = action.includes('BUY');
+  const isSell = action.includes('SELL');
+  if (!isBuy && !isSell) return;
+  const type = isBuy ? 'buy' : isSell ? 'sell' : 'hold';
+  
+  const card = document.createElement('div');
+  card.className = `alert-card ${type} ${isBuy ? 'flash-buy' : isSell ? 'flash-sell' : ''}`;
+  
+  const confLevel = signal.confidence >= 0.6 ? 'high' : signal.confidence >= 0.4 ? 'med' : 'low';
+  
+  card.innerHTML = `
+    <div class="alert-action ${type}">${isBuy ? 'BUY<br>BUY' : isSell ? 'SELL<br>SELL' : 'HOLD'}</div>
+    <div class="alert-info">
+      <div class="alert-symbol">${signal.symbol || '???'}</div>
+      <div class="alert-price">${signal.strike ? '$' + signal.strike + 'C exp:' + signal.expiry : 'Monitoring...'}</div>
+      <div class="alert-reasons">${(signal.reasons || []).slice(0, 3).join(' · ')}</div>
+    </div>
+    <div style="text-align:right;">
+      <div class="alert-conf ${confLevel}">${Math.round((signal.confidence || 0) * 100)}%</div>
+      <div class="alert-time">${new Date().toLocaleTimeString()}</div>
+    </div>
+  `;
+  
+  const list = document.getElementById('alerts-list');
+  list.prepend(card);
+  document.getElementById('alert-count').textContent = list.children.length + ' alerts';
+  
+  if (isBuy || isSell) playAlert(type);
+}
+
+async function scanNow() {
+  document.querySelector('.btn-scan').textContent = '⚡ Scanning...';
+  
+  const wl = await fetchJSON(BOT_API + '/api/options-bot/watchlist');
+  const mc = await fetchJSON(BOT_API + '/api/options-bot/market-candidates?limit=15');
+  const watchlist = [...new Set([...(wl?.watchlist || []), ...(mc?.candidates || [])])];
+  
+  for (const sym of watchlist) {
+    const d = await fetchJSON(BOT_API + '/api/options-bot/signals/' + sym);
+    if (d && d.signal && d.signal.action !== 'HOLD') {
+      addAlert({
+        symbol: sym,
+        action: d.signal.action,
+        confidence: d.signal.confidence,
+        reasons: d.signal.reasons,
+        price: d.current_price,
+      });
+    }
+  }
+  
+  // Also run the full scan (which executes paper trades)
+  const scan = await fetchJSON(BOT_API + '/api/options-bot/scan', { method: 'POST' });
+  if (scan && scan.actions) {
+    for (const a of scan.actions) {
+      addAlert({
+        symbol: a.symbol,
+        action: a.action === 'BUY' ? 'BUY_CALL' : 'SELL_CALL',
+        confidence: 0.8,
+        reasons: a.reasons || [],
+        strike: a.strike,
+        expiry: a.expiry,
+      });
+    }
+  }
+  
+  await updateStatus();
+  document.querySelector('.btn-scan').textContent = '⚡ Scan Now';
+}
+
+async function startBot() {
+  await fetchJSON(BOT_API + '/api/options-bot/start', { method: 'POST' });
+  isRunning = true;
+  await scanNow();
+  
+  if (document.getElementById('auto-scan').checked) {
+    scanTimer = setInterval(scanNow, 5000);
+  }
+  await updateStatus();
+}
+
+async function stopBot() {
+  await fetchJSON(BOT_API + '/api/options-bot/stop', { method: 'POST' });
+  isRunning = false;
+  if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
+  await updateStatus();
+}
+
+async function resetBot() {
+  if (!confirm('Reset bot to $1000? All positions and history will be cleared.')) return;
+  await fetchJSON(BOT_API + '/api/options-bot/reset', { method: 'POST' });
+  document.getElementById('alerts-list').innerHTML = '<div style="text-align:center;padding:40px;color:#4b5563;">Bot reset. Click Start to begin.</div>';
+  await updateStatus();
+}
+
+// Auto-scan toggle
+document.getElementById('auto-scan').addEventListener('change', (e) => {
+  if (e.target.checked && isRunning) {
+    scanTimer = setInterval(scanNow, 5000);
+  } else if (scanTimer) {
+    clearInterval(scanTimer);
+    scanTimer = null;
+  }
+});
+
+async function addTicker() {
+  const input = document.getElementById('add-ticker');
+  const sym = input.value.toUpperCase().trim();
+  if (!sym) return;
+  const r = await fetchJSON(BOT_API + '/api/options-bot/watchlist/add?symbol=' + sym, { method: 'POST' });
+  if (r) {
+    input.value = '';
+    refreshWatchlistChips();
+  }
+}
+
+async function removeTicker(sym) {
+  await fetchJSON(BOT_API + '/api/options-bot/watchlist/remove?symbol=' + sym, { method: 'POST' });
+  refreshWatchlistChips();
+}
+
+async function refreshWatchlistChips() {
+  const r = await fetchJSON(BOT_API + '/api/options-bot/watchlist');
+  if (!r) return;
+  const container = document.getElementById('watchlist-chips');
+  container.innerHTML = '<span style="color:#6b7280;font-size:11px;margin-right:4px;">Watching + market scanner:</span>' +
+    r.watchlist.map(s => `<span style="background:#1e1b4b;border:1px solid #312e81;border-radius:6px;padding:3px 8px;color:#a5b4fc;display:inline-flex;align-items:center;gap:4px;cursor:default;">${s}<span onclick="removeTicker('${s}')" style="cursor:pointer;color:#6b7280;font-size:14px;line-height:1;">&times;</span></span>`).join('');
+}
+
+// Initial load
+updateStatus();
+refreshWatchlistChips();
+</script>
+</body>
+</html>

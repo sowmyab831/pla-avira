@@ -1,0 +1,154 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: pla
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: "arm64"
+      # Use host network to access Ollama on localhost
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      # GPU support - uncomment tolerations if GPU is available
+      # tolerations:
+      # - key: nvidia.com/gpu
+      #   operator: Equal
+      #   value: "true"
+      #   effect: NoSchedule
+      # Ensure backend starts only after dependencies are ready
+      initContainers:
+      - name: wait-for-postgres
+        image: busybox:1.35
+        command: ['sh', '-c', 'until nc -z postgres 5432; do echo waiting for postgres; sleep 2; done']
+      - name: wait-for-redis
+        image: busybox:1.35
+        command: ['sh', '-c', 'until nc -z redis 6379; do echo waiting for redis; sleep 2; done']
+      - name: wait-for-qdrant
+        image: busybox:1.35
+        command: ['sh', '-c', 'until nc -z qdrant 6333; do echo waiting for qdrant; sleep 2; done']
+      - name: wait-for-meili
+        image: busybox:1.35
+        command: ['sh', '-c', 'until nc -z meili 7700; do echo waiting for meili; sleep 2; done']
+      containers:
+      - name: backend
+        image: pla-backend:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: DATABASE_URL
+          value: "postgresql://pla_user:changeme-secure-password-in-prod@postgres:5432/pla_db"
+        - name: REDIS_URL
+          value: "redis://redis:6379/0"
+        - name: QDRANT_URL
+          value: "http://qdrant:6333"
+        - name: MEILI_URL
+          value: "http://meili:7700"
+        - name: MEILI_MASTER_KEY
+          value: "changeme-meili-master-key"
+        - name: OLLAMA_HOST
+          # Using local Ollama service (Mac M4 GPU)
+          value: "http://localhost:11434"
+        - name: OLLAMA_API_BASE
+          # Point to the local Ollama API
+          value: "http://localhost:11434/api"
+        - name: OLLAMA_MODEL
+          value: "qwen3:14b"
+        - name: OLLAMA_FAST_MODEL
+          value: "mistral:7b-instruct"
+        - name: OLLAMA_DEEP_MODEL
+          value: "qwen3:14b"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: ENVIRONMENT
+          value: "development"
+        - name: DEPLOYMENT_MODE
+          value: "kubernetes"
+        - name: CORS_ORIGINS
+          value: "http://localhost:3000,http://localhost:5173,http://frontend:3000,http://localhost:30001,http://127.0.0.1:30001,*"
+        - name: MINIO_ENDPOINT
+          value: "minio:9000"
+        - name: MINIO_ACCESS_KEY
+          value: "minioadmin"
+        - name: MINIO_SECRET_KEY
+          value: "minioadmin"
+        - name: MINIO_BUCKET
+          value: "documents"
+        volumeMounts:
+        - name: documents
+          mountPath: /data/documents
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        startupProbe:
+          httpGet:
+            path: /health/live
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 36  # 180s max for app startup
+          timeoutSeconds: 3
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8000
+          periodSeconds: 30
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8000
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+      volumes:
+      - name: documents
+        persistentVolumeClaim:
+          claimName: documents-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: pla
+spec:
+  selector:
+    app: backend
+  ports:
+  - port: 8000
+    targetPort: 8000
+    name: http
+  type: ClusterIP
+---
+# Optional: Expose backend via NodePort for local testing
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-nodeport
+  namespace: pla
+spec:
+  selector:
+    app: backend
+  ports:
+  - port: 8000
+    targetPort: 8000
+    nodePort: 30000
+    name: http
+  type: NodePort

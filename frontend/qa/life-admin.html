@@ -1,0 +1,8 @@
+<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Avira isolated QA preview</title></head><body><div id="root"></div><script type="module">
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import LifeAdminBoard from '../src/components/LifeAdminBoard.tsx';
+import Subscription from '../src/pages/Subscription.tsx';
+import '../src/index.css';
+createRoot(document.getElementById('root')).render(React.createElement('main',{style:{maxWidth:1100,margin:'auto',padding:20}},React.createElement('p',{style:{padding:12,background:'#fef3c7',color:'#78350f'}},'Isolated QA preview — synthetic data only; payments disabled'),React.createElement(LifeAdminBoard),React.createElement(Subscription)));
+</script></body></html>
